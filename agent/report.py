@@ -81,6 +81,11 @@ def rule_recommendations(results, relationships) -> list[dict]:
             recs.append(dict(priority="Medium", title=f"Make `{miss.column}` required in {t}",
                              why=f"{miss.missing_pct}% of rows were missing `{miss.column}` and had to be filled.",
                              action="Make the field mandatory and monitor completeness weekly."))
+        for x in r.log:
+            if x["action"].startswith("Possible duplicate labels"):
+                recs.append(dict(priority="Medium", title=f"Standardise `{x['column']}` labels in {t}",
+                                 why=x["action"].replace(" — flagged for review", "") + f" ({x['rows_affected']} rows).",
+                                 action="Merge the variants and use a drop-down list instead of free text at entry."))
         for n in trend_change(r.clean):
             if "fell" in n:
                 recs.append(dict(priority="High", title=f"Investigate the drop in {t}", why=n,
@@ -111,7 +116,7 @@ def build_report(results, relationships, answers, llm: LLM) -> str:
                    f"{recs[0]['title']} is the most urgent action.")
 
     out = ["# Final Analysis Report", f"_AI-Powered Data Analyst Agent · {datetime.now():%Y-%m-%d} · "
-                                      f"AI: {llm.name}_", "", "## Executive summary", summary, "",
+                                      f"AI: {'offline rules' if isinstance(llm, MockLLM) else llm.name}_", "", "## Executive summary", summary, "",
            "## Data quality", "| Table | Rows before → after | Score before → after |", "|---|---|---|"]
     for t, r in results.items():
         b, a = quality_scores(r.raw), quality_scores(r.clean)

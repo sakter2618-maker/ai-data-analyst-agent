@@ -27,6 +27,21 @@ from . import profiler as P
 DROP_COLUMN_MISSING_PCT = 60.0
 
 
+def similar_labels(s: pd.Series, cutoff: float = 0.85, max_labels: int = 60) -> list[tuple[str, str, int]]:
+    """Pairs of category labels that look like typos of each other (rarer label first)."""
+    from difflib import SequenceMatcher
+    vc = s.dropna().astype(str).value_counts()
+    if len(vc) > max_labels:
+        return []
+    labs, out = list(vc.index), []
+    for i, a in enumerate(labs):
+        for b in labs[i + 1:]:
+            if len(a) >= 4 and len(b) >= 4 and SequenceMatcher(None, a.lower(), b.lower()).ratio() >= cutoff:
+                rare, common = (a, b) if vc[a] < vc[b] else (b, a)
+                out.append((rare, common, int(vc[rare])))
+    return out
+
+
 @dataclass
 class CleanResult:
     table: str
@@ -110,6 +125,9 @@ def clean_table(df: pd.DataFrame, table: str = "data", fill_numeric: str = "medi
             if changed:
                 d[c] = new.astype(object).where(new.notna(), None)
                 add("3. Fix types", c, changed, "Unified spelling / case of category labels")
+            # near-duplicate labels (e.g. "Mashad" vs "Mashhad"): flag for a human, don't guess
+            for a_lab, b_lab, n_rows in similar_labels(d[c]):
+                add("3. Fix types", c, n_rows, f"Possible duplicate labels '{a_lab}' and '{b_lab}' — flagged for review")
 
     # 4. exact duplicates -------------------------------------------------------
     dup = d.duplicated(keep="first")
