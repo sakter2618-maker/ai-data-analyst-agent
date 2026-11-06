@@ -1,7 +1,7 @@
 """
 llm.py — one small interface for the AI model, with three interchangeable providers.
 
-    Gemini  (default)  needs GEMINI_API_KEY      model: GEMINI_MODEL  (default gemini-2.5-flash)
+    Gemini  (default)  needs GEMINI_API_KEY      model: GEMINI_MODEL  (default gemini-3.6-flash)
     Claude             needs ANTHROPIC_API_KEY   model: CLAUDE_MODEL  (default claude-haiku-4-5)
     Mock               no key needed — rule-based, so the agent and its tests work offline
 
@@ -46,7 +46,7 @@ class GeminiLLM(LLM):
     def __init__(self, api_key: str, model: str | None = None):
         from google import genai
         self.client = genai.Client(api_key=api_key)
-        self.model = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.model = model or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
     def complete(self, system, prompt, max_tokens=1500):
         from google.genai import types
