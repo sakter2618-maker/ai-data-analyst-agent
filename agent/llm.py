@@ -48,12 +48,21 @@ class GeminiLLM(LLM):
         self.client = genai.Client(api_key=api_key)
         self.model = model or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
+    # Gemini 3 models "think" before answering and those thinking tokens count toward the output
+    # limit, so a tight limit returns an empty or cut-off answer. Keep thinking low and leave room.
+    THINKING_ROOM = 4096
+
     def complete(self, system, prompt, max_tokens=1500):
         from google.genai import types
-        r = self.client.models.generate_content(
-            model=self.model, contents=prompt,
-            config=types.GenerateContentConfig(system_instruction=system, max_output_tokens=max_tokens,
-                                               temperature=0.1))
+        base = dict(system_instruction=system, max_output_tokens=max_tokens + self.THINKING_ROOM, temperature=0.1)
+        try:
+            cfg = types.GenerateContentConfig(**base, thinking_config=types.ThinkingConfig(thinking_level="low"))
+            r = self.client.models.generate_content(model=self.model, contents=prompt, config=cfg)
+        except Exception as e:  # model without thinking levels: retry plainly; real errors re-raise
+            if "thinking" not in str(e).lower():
+                raise
+            r = self.client.models.generate_content(model=self.model, contents=prompt,
+                                                    config=types.GenerateContentConfig(**base))
         return r.text or ""
 
 
