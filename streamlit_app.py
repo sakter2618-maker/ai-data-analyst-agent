@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import os
 import re
 from pathlib import Path
 
@@ -249,9 +250,18 @@ with tab_a:
         q = st.text_input("Your question", placeholder="e.g. Which city has the most customers?")
         sent = st.form_submit_button("Ask the agent", type="primary")
     question = picked or (q.strip() if sent and q.strip() else None)
+    # Public demo guard: cap AI questions per visit so one visitor can't use up the API quota
+    max_q = int(os.environ.get("MAX_AI_QUESTIONS", "15"))
+    used = st.session_state.setdefault("ai_questions_used", 0)
+    if question and not isinstance(llm, MockLLM) and used >= max_q:
+        st.warning(f"This demo answers up to {max_q} AI questions per visit. Switch the sidebar to "
+                   "Offline to keep exploring, or reload the page later.")
+        question = None
     if question:
         with st.spinner("Writing SQL and analysing…"):
             st.session_state.answers.insert(0, ask(question, engine, llm, rel_txt))
+        if not isinstance(llm, MockLLM):
+            st.session_state.ai_questions_used = used + 1
     for i, ans in enumerate(st.session_state.answers):
         st.markdown(f"#### {ans.question}")
         if ans.error:

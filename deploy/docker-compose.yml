@@ -1,0 +1,40 @@
+# Runs on the VPS next to the portfolio, behind the existing Traefik.
+#   web  -> https://salmaakter.me/ai-agent   (Streamlit app, public)
+#   api  -> http://ai-data-analyst-api:8000  (private: only n8n on the Docker network can call it)
+#
+# Secrets live in deploy/.env on the server (never in Git):
+#   GEMINI_API_KEY=...      (optional; without it the agent runs in offline mode)
+#   N8N_NETWORK=...         (the Docker network n8n is on)
+services:
+  web:
+    build: ..
+    image: ai-data-analyst-agent:latest
+    container_name: ai-data-analyst-web
+    restart: unless-stopped
+    env_file: .env
+    command: >
+      streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+      --server.baseUrlPath=ai-agent --server.enableXsrfProtection=true
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ai-agent.rule=Host(`salmaakter.me`) && PathPrefix(`/ai-agent`)
+      - traefik.http.routers.ai-agent.entrypoints=websecure
+      - traefik.http.routers.ai-agent.tls.certresolver=letsencrypt
+      - traefik.http.routers.ai-agent.priority=100
+      - traefik.http.services.ai-agent.loadbalancer.server.port=8501
+    mem_limit: 1g
+
+  api:
+    image: ai-data-analyst-agent:latest
+    container_name: ai-data-analyst-api
+    restart: unless-stopped
+    env_file: .env
+    command: python api.py
+    depends_on: [web]
+    networks: [default, n8n]
+    mem_limit: 1g
+
+networks:
+  n8n:
+    external: true
+    name: ${N8N_NETWORK}
