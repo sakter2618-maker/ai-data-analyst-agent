@@ -5,6 +5,8 @@
 # Secrets live in deploy/.env on the server (never in Git):
 #   GEMINI_API_KEY=...      (optional; without it the agent runs in offline mode)
 #   N8N_NETWORK=...         (the Docker network n8n is on)
+name: ai-data-analyst-agent
+
 services:
   web:
     build: ..
