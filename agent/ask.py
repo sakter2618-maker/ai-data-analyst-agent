@@ -84,6 +84,22 @@ def rule_based_sql(question: str, engine: SQLEngine) -> dict:
     dates = [c for c in cols if pd.api.types.is_datetime64_any_dtype(df[c])]
     cats = [c for c in cols if (df[c].dtype == object or pd.api.types.is_bool_dtype(df[c])) and df[c].nunique() <= 60]
     mentioned = _col_mentioned(q, cols)
+    all_cols = sorted({c for d in engine.tables.values() for c in d.columns})
+
+    # Don't guess: if the question names a column that isn't in the data, say so.
+    missing = []
+    m_by = re.search(r"\b(?:by|per|for each)\s+([a-z_]+)", q)
+    if m_by and not any(c in cats + dates for c in mentioned) and not _col_mentioned(m_by.group(1), cols):
+        missing.append(m_by.group(1))
+    m_metric = re.search(r"\b(revenue|sales|amount|profit|income|cost|spend|price|value)\b", q)
+    if m_metric and not any(c in numeric for c in mentioned):
+        missing.append(m_metric.group(1))
+    if missing:
+        return {"sql": "", "chart": {"type": "table"}, "title": question.strip().rstrip("?").capitalize(),
+                "assumption": "", "missing": (f"Offline mode can't find a column for {' / '.join(missing)} in the "
+                                              f"data. Available columns: {', '.join(all_cols)}. Rephrase with one of "
+                                              f"these names, or add an AI key so the agent can join tables and "
+                                              f"compute it (e.g. quantity × unit_price).")}
 
     metric_col = next((c for c in mentioned if c in numeric), None)
     agg = "AVG" if re.search(r"\b(average|avg|mean)\b", q) else "SUM"
@@ -159,6 +175,9 @@ def ask(question: str, engine: SQLEngine, llm: LLM, relationships: str = "", con
     ans.sql, ans.chart = plan.get("sql", ""), plan.get("chart") or {}
     ans.title = plan.get("title", question)
     ans.assumption = ans.assumption or plan.get("assumption", "")
+    if plan.get("missing"):
+        ans.error = ans.text = plan["missing"]
+        return ans
 
     for attempt in range(2):
         try:
